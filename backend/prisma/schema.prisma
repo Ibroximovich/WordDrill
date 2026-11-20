@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int               @id @default(autoincrement())
+  telegramId   BigInt            @unique
+  firstName    String
+  streakDays   Int               @default(0)
+  lastActiveAt DateTime          @default(now())
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  progress     UserWordProgress[]
+}
+
+model Unit {
+  id         Int    @id @default(autoincrement())
+  bookNumber Int
+  unitNumber Int
+  title      String
+  words      Word[]
+
+  @@unique([bookNumber, unitNumber])
+}
+
+model Word {
+  id              Int               @id @default(autoincrement())
+  unitId          Int
+  english         String
+  uzbek           String
+  exampleSentence String
+  audioUrl        String?
+  unit            Unit              @relation(fields: [unitId], references: [id])
+  progress        UserWordProgress[]
+}
+
+model UserWordProgress {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  wordId       Int
+  mistakeCount Int      @default(0)
+  srsStage     Int      @default(0)
+  nextReviewAt DateTime @default(now())
+  isMastered   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id])
+  word         Word     @relation(fields: [wordId], references: [id])
+
+  @@unique([userId, wordId])
+}
