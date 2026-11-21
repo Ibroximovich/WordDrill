@@ -54,3 +54,19 @@ model UserWordProgress {
 
   @@unique([userId, wordId])
 }
+
+model Duel {
+  id            String   @id @default(cuid())
+  unitId        Int
+  wordIds       Int[]
+  creatorId     BigInt
+  creatorName   String
+  creatorScore  Int?
+  creatorTime   Int?
+  opponentId    BigInt?
+  opponentName  String?
+  opponentScore Int?
+  opponentTime  Int?
+  status        String   @default("WAITING")
+  createdAt     DateTime @default(now())
+}

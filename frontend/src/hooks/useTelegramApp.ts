@@ -14,8 +14,10 @@ interface TelegramWebApp {
   ready: () => void;
   expand: () => void;
   close: () => void;
+  openTelegramLink?: (url: string) => void;
   initData: string;
   initDataUnsafe: {
+    start_param?: string;
     user?: {
       id: number;
       first_name: string;
@@ -81,5 +83,16 @@ export function useTelegramApp() {
     },
   };
 
-  return { isReady, themeParams, twa, getInitData, haptic };
+  const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param || '';
+
+  const shareUrl = (url: string, text: string) => {
+    const fullShareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+    if (window.Telegram?.WebApp?.openTelegramLink) {
+      window.Telegram.WebApp.openTelegramLink(fullShareUrl);
+    } else {
+      window.open(fullShareUrl, '_blank');
+    }
+  };
+
+  return { isReady, themeParams, twa, getInitData, haptic, startParam, shareUrl };
 }

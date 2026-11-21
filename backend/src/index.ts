@@ -10,6 +10,7 @@ import userRoutes from './routes/users';
 import unitRoutes from './routes/units';
 import progressRoutes from './routes/progress';
 import ttsRoutes from './routes/tts';
+import duelRoutes from './routes/duel';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -31,6 +32,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/units', unitRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/tts', ttsRoutes);
+app.use('/api/duel', duelRoutes);
 
 // Start server
 app.listen(PORT, async () => {

@@ -5,10 +5,11 @@ import { useStore } from './store/useStore';
 import Dashboard from './pages/Dashboard';
 import LearnPage from './pages/LearnPage';
 import ReviewPage from './pages/ReviewPage';
+import DuelPage from './pages/DuelPage';
 import LoadingScreen from './components/LoadingScreen';
 
 function App() {
-  const { isReady, themeParams } = useTelegramApp();
+  const { isReady, themeParams, startParam } = useTelegramApp();
   const { user, isLoading, authenticate } = useStore();
 
   useEffect(() => {
@@ -35,13 +36,27 @@ function App() {
     return <LoadingScreen />;
   }
 
+  const initialDuelId = startParam && startParam.startsWith('duel_') ? startParam.replace('duel_', '') : null;
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={user ? <Dashboard /> : <Navigate to="/" replace />} />
+        <Route
+          path="/"
+          element={
+            initialDuelId ? (
+              <Navigate to={`/duel/${initialDuelId}`} replace />
+            ) : user ? (
+              <Dashboard />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
         <Route path="/learn/:unitId" element={<LearnPage />} />
         <Route path="/learn/:unitId/:part" element={<LearnPage />} />
         <Route path="/review" element={<ReviewPage />} />
+        <Route path="/duel/:duelId" element={<DuelPage />} />
       </Routes>
     </BrowserRouter>
   );
