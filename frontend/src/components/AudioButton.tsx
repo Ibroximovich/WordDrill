@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from "react";
 
 interface AudioButtonProps {
   word: string;
@@ -6,9 +6,16 @@ interface AudioButtonProps {
   autoPlay?: boolean;
 }
 
+// Build TTS URL via our backend proxy
+function getTtsUrl(word: string): string {
+  const base = import.meta.env.VITE_API_URL || "";
+  return `${base}/api/tts?word=${encodeURIComponent(word)}`;
+}
+
 export default function AudioButton({ word, audioUrl, autoPlay }: AudioButtonProps) {
   const [isPlaying, setIsPlaying] = useState(false);
 
+  // Last-resort fallback: browser speechSynthesis
   const speakWord = useCallback(() => {
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -24,21 +31,37 @@ export default function AudioButton({ word, audioUrl, autoPlay }: AudioButtonPro
     }
   }, [word]);
 
+  // Try playing an <audio> from the given URL; on any error fall back to speakWord
+  const playFromUrl = useCallback(
+    (url: string) => {
+      const audio = new Audio(url);
+      audio.onended = () => setIsPlaying(false);
+      audio.onerror = () => {
+        console.warn("Audio load failed, falling back to speechSynthesis");
+        speakWord();
+      };
+      audio.play().catch(() => {
+        console.warn("Audio play() rejected, falling back to speechSynthesis");
+        speakWord();
+      });
+    },
+    [speakWord]
+  );
+
   const playAudio = useCallback(() => {
     if (isPlaying) return;
     setIsPlaying(true);
 
+    // Priority 1: explicit audioUrl from DB (if any)
     if (audioUrl) {
-      const audio = new Audio(audioUrl);
-      audio.onended = () => setIsPlaying(false);
-      audio.onerror = () => {
-        speakWord();
-      };
-      audio.play().catch(() => speakWord());
-    } else {
-      speakWord();
+      playFromUrl(audioUrl);
+      return;
     }
-  }, [audioUrl, isPlaying, speakWord]);
+
+    // Priority 2: backend TTS proxy (Google Translate)
+    const ttsUrl = getTtsUrl(word);
+    playFromUrl(ttsUrl);
+  }, [audioUrl, isPlaying, word, playFromUrl]);
 
   useEffect(() => {
     if (autoPlay) {

@@ -1,152 +1,85 @@
 import { PrismaClient } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const prisma = new PrismaClient();
 
-const seedData = [
-  {
-    bookNumber: 1,
-    unitNumber: 1,
-    title: "Unit 1 - The Lion and the Rabbit",
-    words: [
-      {
-        english: "afraid",
-        uzbek: "qo'rqqan",
-        exampleSentence: "The woman was ___ of what she saw.",
-      },
-      {
-        english: "agree",
-        uzbek: "rozi bo'lmoq / fikriga qo'shilmoq",
-        exampleSentence: "The food is very good in that restaurant. I ___ with you.",
-      },
-      {
-        english: "angry",
-        uzbek: "jahli chiqqan / g'azablangan",
-        exampleSentence: "She didn't do her homework, so her father is ___.",
-      },
-      {
-        english: "arrive",
-        uzbek: "yetib kelmoq",
-        exampleSentence: "The bus always ___s at the corner of my street at 4:00.",
-      },
-      {
-        english: "attack",
-        uzbek: "hujum qilmoq",
-        exampleSentence: "The man with the sword tried to ___ the other man first.",
-      },
-      {
-        english: "bottom",
-        uzbek: "pastki qism / tag",
-        exampleSentence: "The ___ of my shoe has a hole in it.",
-      },
-      {
-        english: "clever",
-        uzbek: "aqlli / zukko",
-        exampleSentence: "The ___ boy thought of a good idea.",
-      },
-      {
-        english: "cruel",
-        uzbek: "shafqatsiz / zolim",
-        exampleSentence: "The ___ man yelled at his sister.",
-      },
-      {
-        english: "finally",
-        uzbek: "nihoyat / oxiri",
-        exampleSentence: "He ___ crossed the finish line after five hours of running.",
-      },
-      {
-        english: "hide",
-        uzbek: "yashirinmoq / berkitmoq",
-        exampleSentence: "The other children will ___ while you count to 100.",
-      },
-      {
-        english: "hunt",
-        uzbek: "ov qilmoq",
-        exampleSentence: "Long ago, people used to ___ with bows and arrows.",
-      },
-      {
-        english: "lot",
-        uzbek: "ko'p",
-        exampleSentence: "There are a ___ of apples in the basket.",
-      },
-      {
-        english: "middle",
-        uzbek: "o'rta / markaz",
-        exampleSentence: "The Canadian flag has a maple leaf in the ___ of it.",
-      },
-      {
-        english: "moment",
-        uzbek: "lahza / soniya",
-        exampleSentence: "I was only a few ___s late for the meeting.",
-      },
-      {
-        english: "pleased",
-        uzbek: "mamnun / xursand",
-        exampleSentence: "She was ___ with the phone call she received.",
-      },
-      {
-        english: "promise",
-        uzbek: "va'da bermoq",
-        exampleSentence: "He promised to return my key by tomorrow. I ___ to be on time.",
-      },
-      {
-        english: "reply",
-        uzbek: "javob bermoq",
-        exampleSentence: "She asked him what time his meeting was, and he had to ___ quickly.",
-      },
-      {
-        english: "safe",
-        uzbek: "xavfsiz",
-        exampleSentence: "Put on your seat belt in the car to be ___.",
-      },
-      {
-        english: "trick",
-        uzbek: "hiyla / aldov",
-        exampleSentence: "His card ___ really surprised us.",
-      },
-      {
-        english: "well",
-        uzbek: "yaxshi",
-        exampleSentence: "The couple can dance quite ___.",
-      },
-    ],
-  },
-];
+interface WordEntry {
+  en: string;
+  uz: string;
+}
+
+interface UnitEntry {
+  unit: number;
+  words: WordEntry[];
+}
+
+function loadJsonFile(filename: string): UnitEntry[] {
+  const filePath = path.join(__dirname, filename);
+  const raw = fs.readFileSync(filePath, 'utf-8');
+  return JSON.parse(raw) as UnitEntry[];
+}
 
 async function main() {
-  console.log('🌱 Seeding database...');
+  console.log('🌱 Seeding database from JSON files...');
 
-  for (const unitData of seedData) {
-    const { words, ...unitInfo } = unitData;
-    
+  // Load all 3 JSON files and merge into one array
+  const allUnits: UnitEntry[] = [
+    ...loadJsonFile('words_1_10.json'),
+    ...loadJsonFile('words_11_20.json'),
+    ...loadJsonFile('words_21_30.json'),
+  ];
+
+  console.log(`📦 Loaded ${allUnits.length} units, ${allUnits.reduce((s, u) => s + u.words.length, 0)} words total`);
+
+  let totalWords = 0;
+
+  for (const unitEntry of allUnits) {
+    const bookNumber = 1;
+    const unitNumber = unitEntry.unit;
+    const title = `Essential 1 — Unit ${unitNumber}`;
+
+    // Upsert the Unit (create if not exists, update title if exists)
     const unit = await prisma.unit.upsert({
       where: {
-        bookNumber_unitNumber: {
-          bookNumber: unitInfo.bookNumber,
-          unitNumber: unitInfo.unitNumber,
-        },
+        bookNumber_unitNumber: { bookNumber, unitNumber },
       },
-      update: { title: unitInfo.title },
-      create: unitInfo,
+      update: { title },
+      create: { bookNumber, unitNumber, title },
     });
 
-    console.log(`✅ Unit created: ${unit.title}`);
-
-    for (const wordData of words) {
-      await prisma.word.upsert({
-        where: {
-          id: (await prisma.word.findFirst({
-            where: { unitId: unit.id, english: wordData.english },
-          }))?.id ?? 0,
-        },
-        update: wordData,
-        create: { ...wordData, unitId: unit.id },
+    // Upsert each word (safe: won't delete existing progress)
+    for (const w of unitEntry.words) {
+      const existing = await prisma.word.findFirst({
+        where: { unitId: unit.id, english: w.en },
       });
+
+      if (existing) {
+        await prisma.word.update({
+          where: { id: existing.id },
+          data: {
+            uzbek: w.uz,
+            exampleSentence: existing.exampleSentence || `Use the word ___ in a sentence.`,
+          },
+        });
+      } else {
+        await prisma.word.create({
+          data: {
+            unitId: unit.id,
+            english: w.en,
+            uzbek: w.uz,
+            exampleSentence: `Use the word ___ in a sentence.`,
+          },
+        });
+      }
+
+      totalWords++;
     }
 
-    console.log(`  ✅ ${words.length} words seeded for ${unit.title}`);
+    console.log(`  ✅ Unit ${unitNumber}: "${title}" — ${unitEntry.words.length} words`);
   }
 
-  console.log('✅ Seeding complete!');
+  console.log(`\n🎉 Seeding complete! ${allUnits.length} units, ${totalWords} words total.`);
 }
 
 main()
