@@ -222,6 +222,14 @@ export default function DuelPage() {
 
   // --- 1. LOBBY VIEW ---
   if (view === "lobby") {
+    const opponentDisplayName = duel.opponentName
+      ? duel.opponentName
+      : !isCreator
+      ? (user?.firstName ? `${user.firstName} (Siz)` : "Siz (Raqib)")
+      : "Raqib taklif qilinmagan";
+
+    const opponentInitial = opponentDisplayName ? opponentDisplayName[0]?.toUpperCase() : "?";
+
     return (
       <div className="min-h-screen flex flex-col justify-between p-6" style={{ backgroundColor: "var(--tg-theme-bg-color)" }}>
         <div className="text-center pt-8">
@@ -248,7 +256,7 @@ export default function DuelPage() {
               </div>
               <div>
                 <p className="text-sm font-bold" style={{ color: "var(--tg-theme-text-color)" }}>
-                  {duel.creatorName}
+                  {duel.creatorName} {isCreator && "(Siz)"}
                 </p>
                 <p className="text-xs" style={{ color: "var(--tg-theme-hint-color)" }}>
                   {"Duel yaratuvchisi"}
@@ -271,14 +279,14 @@ export default function DuelPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white" style={{ backgroundColor: "#f97316" }}>
-                {duel.opponentName ? duel.opponentName[0]?.toUpperCase() : "?"}
+                {opponentInitial}
               </div>
               <div>
                 <p className="text-sm font-bold" style={{ color: "var(--tg-theme-text-color)" }}>
-                  {duel.opponentName || "Raqib taklif qilinmagan"}
+                  {opponentDisplayName}
                 </p>
                 <p className="text-xs" style={{ color: "var(--tg-theme-hint-color)" }}>
-                  {"Raqib"}
+                  {!isCreator ? "Siz (Raqib)" : "Raqib"}
                 </p>
               </div>
             </div>
@@ -303,21 +311,25 @@ export default function DuelPage() {
 
         {/* Actions */}
         <div className="space-y-3 pb-4">
-          <button
-            onClick={handleShare}
-            className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md"
-            style={{ backgroundColor: "#3b82f6" }}
-          >
-            <span>{"📤 Do'stga havola yuborish"}</span>
-          </button>
+          {/* 1. Only show share button for creator */}
+          {isCreator && (
+            <button
+              onClick={handleShare}
+              className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md"
+              style={{ backgroundColor: "#3b82f6" }}
+            >
+              <span>{"📤 Do'stga havola yuborish"}</span>
+            </button>
+          )}
 
+          {/* 2. Main action button */}
           {!hasUserSubmitted ? (
             <button
               onClick={handleStartQuiz}
               className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
               style={{ backgroundColor: "#ef4444" }}
             >
-              <span>{"⚔️ O'zim boshlash"}</span>
+              <span>{isCreator ? "⚔️ O'zim boshlash" : "⚔️ Bellashuvni boshlash"}</span>
             </button>
           ) : (
             <button
@@ -547,14 +559,14 @@ export default function DuelPage() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white" style={{ backgroundColor: "#f97316" }}>
-                {duel.opponentName ? duel.opponentName[0]?.toUpperCase() : "?"}
+                {(duel.opponentName || (!isCreator ? (user?.firstName || "R") : "?"))[0]?.toUpperCase() || "?"}
               </div>
               <div>
                 <p className="text-sm font-bold" style={{ color: "var(--tg-theme-text-color)" }}>
-                  {duel.opponentName || "Raqib hali qo'shilmadi"} {!isCreator && duel.opponentName && "(Siz)"}
+                  {duel.opponentName || (!isCreator ? (user?.firstName ? `${user.firstName} (Siz)` : "Siz (Raqib)") : "Raqib hali qo'shilmadi")}
                 </p>
                 <p className="text-xs" style={{ color: "var(--tg-theme-hint-color)" }}>
-                  {"Raqib"}
+                  {!isCreator ? "Siz (Raqib)" : "Raqib"}
                 </p>
               </div>
             </div>
@@ -586,13 +598,15 @@ export default function DuelPage() {
       <div className="space-y-3 pb-4">
         {!isCompleted && (
           <>
-            <button
-              onClick={handleShare}
-              className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md"
-              style={{ backgroundColor: "#3b82f6" }}
-            >
-              <span>{"📤 Do'stga havolani qayta ulashish"}</span>
-            </button>
+            {isCreator && (
+              <button
+                onClick={handleShare}
+                className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md"
+                style={{ backgroundColor: "#3b82f6" }}
+              >
+                <span>{"📤 Do'stga havolani qayta ulashish"}</span>
+              </button>
+            )}
             <button
               onClick={() => loadDuel(false)}
               className="w-full py-3.5 rounded-2xl font-bold border transition-all active:scale-95 flex items-center justify-center gap-2"
