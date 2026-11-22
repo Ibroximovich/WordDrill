@@ -44,40 +44,83 @@ export function startBot() {
     );
   });
 
-  // /stats command
-  bot.command('stats', async (ctx) => {
-    const telegramId = BigInt(ctx.from?.id || 0);
-    
-    const user = await prisma.user.findUnique({
-      where: { telegramId },
-      include: {
-        progress: {
-          where: { isMastered: true },
-        },
-      },
-    });
+  // Admin Telegram ID
+  const ADMIN_TELEGRAM_ID = 1100274830;
 
-    if (!user) {
-      await ctx.reply('Siz hali ro\'yxatdan o\'tmagansiz. /start buyrug\'ini yuboring!');
+  // /stats command - only for admin
+  bot.command('stats', async (ctx) => {
+    const senderId = ctx.from?.id;
+
+    // Ignore non-admin users completely
+    if (senderId !== ADMIN_TELEGRAM_ID) {
       return;
     }
 
-    const masteredCount = user.progress.length;
-    const dueCount = await prisma.userWordProgress.count({
-      where: {
-        userId: user.id,
-        nextReviewAt: { lte: new Date() },
-        isMastered: false,
-      },
-    });
+    try {
+      const now = new Date();
 
-    await ctx.reply(
-      `📊 *Sizning statistikangiz:*\n\n` +
-      `🔥 Streak: ${user.streakDays} kun\n` +
-      `✅ O'zlashtirilgan so'zlar: ${masteredCount} ta\n` +
-      `📝 Takrorlash kerak: ${dueCount} ta\n`,
-      { parse_mode: 'Markdown' }
-    );
+      // 1. Total users
+      const totalUsers = await prisma.user.count();
+
+      // 2. Today's registrations (Asia/Tashkent UTC+5)
+      const tashkentOffset = 5 * 60 * 60 * 1000;
+      const tashkentNow = new Date(now.getTime() + tashkentOffset);
+      const todayStart = new Date(
+        Date.UTC(
+          tashkentNow.getUTCFullYear(),
+          tashkentNow.getUTCMonth(),
+          tashkentNow.getUTCDate(),
+          0,
+          0,
+          0,
+          0
+        ) - tashkentOffset
+      );
+
+      const todayRegistered = await prisma.user.count({
+        where: {
+          createdAt: { gte: todayStart },
+        },
+      });
+
+      // 3. Total duels (and completed count)
+      const totalDuels = await prisma.duel.count();
+      const completedDuels = await prisma.duel.count({
+        where: { status: 'COMPLETED' },
+      });
+
+      // 4. Active users who studied at least 1 word
+      const activeLearners = await prisma.user.count({
+        where: {
+          progress: {
+            some: {
+              OR: [
+                { srsStage: { gt: 0 } },
+                { mistakeCount: { gt: 0 } },
+                { isMastered: true },
+              ],
+            },
+          },
+        },
+      });
+
+      const message =
+        `👑 *WordDrill — Admin Statistikasi*\n\n` +
+        `👥 *Jami foydalanuvchilar:* ${totalUsers} ta\n` +
+        `🆕 *Bugun ro'yxatdan o'tganlar:* ${todayRegistered} ta\n` +
+        `⚔️ *Jami Duellar soni:* ${totalDuels} ta (tugallangan: ${completedDuels})\n` +
+        `📚 *Faol o'quvchilar (kamida 1 ta so'z):* ${activeLearners} ta\n\n` +
+        `🕒 _Toshkent vaqti: ${new Intl.DateTimeFormat('uz-UZ', {
+          timeZone: 'Asia/Tashkent',
+          dateStyle: 'short',
+          timeStyle: 'medium',
+        }).format(now)}_`;
+
+      await ctx.reply(message, { parse_mode: 'Markdown' });
+    } catch (error) {
+      console.error('Admin /stats error:', error);
+      await ctx.reply('❌ Statistikani olishda xatolik yuz berdi.');
+    }
   });
 
   bot.start();

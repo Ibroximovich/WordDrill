@@ -7,7 +7,7 @@ import { prisma } from './lib/prisma';
 import { startBot } from './bot';
 import { startCronJobs } from './cron';
 import userRoutes from './routes/users';
-import unitRoutes from './routes/units';
+import unitRoutes, { getDueWords } from './routes/units';
 import progressRoutes from './routes/progress';
 import ttsRoutes from './routes/tts';
 import duelRoutes from './routes/duel';
@@ -33,6 +33,20 @@ app.use('/api/units', unitRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/tts', ttsRoutes);
 app.use('/api/duel', duelRoutes);
+
+// Direct /api/review endpoint (alias for /api/units/review/due)
+app.get('/api/review', async (req, res) => {
+  const userId = parseInt(req.query.userId as string);
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+  try {
+    const result = await getDueWords(userId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Start server
 app.listen(PORT, async () => {

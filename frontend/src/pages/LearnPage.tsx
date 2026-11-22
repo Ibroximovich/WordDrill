@@ -73,14 +73,6 @@ export default function LearnPage() {
 
         // Shuffle for Stage 1
         setWords(shuffleArray(selectedWords));
-
-        // Initialize progress for all words in background
-        if (user) {
-          api.post("/progress/bulk-init", {
-            userId: user.id,
-            unitId: parseInt(unitId!),
-          }).catch(console.error);
-        }
       } catch (error) {
         console.error("Failed to load words:", error);
       } finally {

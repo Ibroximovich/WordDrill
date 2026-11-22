@@ -4,25 +4,49 @@ import { getBotInstance } from './bot';
 import { InlineKeyboard } from 'grammy';
 
 export function startCronJobs() {
-  // Every hour: check for users with due words
+  // Check hourly
   cron.schedule('0 * * * *', async () => {
-    console.log('⏰ Cron: Checking for due words...');
-    
+    console.log('⏰ Cron: Checking for due review reminders...');
+
+    const now = new Date();
+
+    // 1. Check Tashkent time (UTC+5 / Asia/Tashkent)
+    const tashkentHour = parseInt(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Tashkent',
+        hour: 'numeric',
+        hour12: false,
+      }).format(now),
+      10
+    );
+
+    // Only allow sending between 09:00 and 21:00 Tashkent time
+    if (tashkentHour < 9 || tashkentHour >= 21) {
+      console.log(`🌙 Cron: Current Tashkent hour is ${tashkentHour}:00 (outside 09:00-21:00 window). Skipping reminders.`);
+      return;
+    }
+
     const webAppUrl = process.env.WEBAPP_URL || 'https://your-webapp-url.com';
     const bot = getBotInstance();
-    
+
     if (!bot) {
-      console.log('⚠️  Bot not initialized, skipping cron');
+      console.log('⚠️ Bot not initialized, skipping cron');
       return;
     }
 
     try {
-      // Find all users who have due words
-      const usersWithDueWords = await prisma.user.findMany({
+      // 2. Only users who haven't received a reminder in the last 20 hours (max 1 reminder per day)
+      const twentyHoursAgo = new Date(now.getTime() - 20 * 60 * 60 * 1000);
+
+      const candidateUsers = await prisma.user.findMany({
         where: {
+          OR: [
+            { lastReminderAt: null },
+            { lastReminderAt: { lte: twentyHoursAgo } },
+          ],
           progress: {
             some: {
-              nextReviewAt: { lte: new Date() },
+              nextReviewAt: { lte: now },
               isMastered: false,
             },
           },
@@ -30,16 +54,17 @@ export function startCronJobs() {
         include: {
           progress: {
             where: {
-              nextReviewAt: { lte: new Date() },
+              nextReviewAt: { lte: now },
               isMastered: false,
             },
           },
         },
       });
 
-      for (const user of usersWithDueWords) {
+      for (const user of candidateUsers) {
         const dueCount = user.progress.length;
-        
+        if (dueCount === 0) continue;
+
         const keyboard = new InlineKeyboard().webApp(
           `📝 ${dueCount} ta so'zni takrorlash`,
           `${webAppUrl}?mode=review`
@@ -56,17 +81,24 @@ export function startCronJobs() {
               reply_markup: keyboard,
             }
           );
+
+          // 3. Update lastReminderAt so user won't get spammed within 20 hours
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { lastReminderAt: new Date() },
+          });
+
           console.log(`✅ Reminder sent to user ${user.id} (${dueCount} due words)`);
         } catch (err) {
           console.error(`❌ Failed to send reminder to user ${user.id}:`, err);
         }
       }
 
-      console.log(`⏰ Cron complete: notified ${usersWithDueWords.length} users`);
+      console.log(`⏰ Cron complete: processed ${candidateUsers.length} users`);
     } catch (err) {
       console.error('❌ Cron error:', err);
     }
   });
 
-  console.log('⏰ Cron jobs started (hourly review reminders)');
+  console.log('⏰ Cron jobs started (hourly review reminders, Tashkent 09:00-21:00, max 1/day)');
 }

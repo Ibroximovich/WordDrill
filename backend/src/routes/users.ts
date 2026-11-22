@@ -75,6 +75,11 @@ router.get('/:id/stats', async (req: Request, res: Response) => {
         userId,
         nextReviewAt: { lte: new Date() },
         isMastered: false,
+        // Only words actually studied in lessons
+        OR: [
+          { srsStage: { gt: 0 } },
+          { mistakeCount: { gt: 0 } },
+        ],
       },
     });
 

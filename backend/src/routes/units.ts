@@ -64,54 +64,80 @@ router.get('/:id/words', async (req: Request, res: Response) => {
   }
 });
 
+// Helper function to get due review words for a user
+export async function getDueWords(userId: number) {
+  const now = new Date();
+  const dueProgress = await prisma.userWordProgress.findMany({
+    where: {
+      userId,
+      nextReviewAt: { lte: now },
+      isMastered: false,
+      // Only words actually studied in lessons (stage > 0 or has mistakes)
+      OR: [
+        { srsStage: { gt: 0 } },
+        { mistakeCount: { gt: 0 } },
+      ],
+    },
+    include: {
+      word: {
+        include: { unit: true },
+      },
+    },
+    orderBy: { nextReviewAt: 'asc' },
+  });
+
+  const allWords = await prisma.word.findMany({
+    select: { english: true },
+  });
+
+  const reviewWords = dueProgress.map((p) => {
+    const correctAnswer = p.word.english;
+    const otherOptions = allWords
+      .map((w) => w.english)
+      .filter((e) => e !== correctAnswer)
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3);
+
+    const options = [...otherOptions, correctAnswer].sort(() => Math.random() - 0.5);
+
+    return {
+      progressId: p.id,
+      word: p.word,
+      mistakeCount: p.mistakeCount,
+      srsStage: p.srsStage,
+      nextReviewAt: p.nextReviewAt,
+      options,
+    };
+  });
+
+  return { reviewWords, count: reviewWords.length };
+}
+
 // GET /api/units/review/due - Get due words for review
 router.get('/review/due', async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.query.userId as string);
-    
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
 
-    const dueProgress = await prisma.userWordProgress.findMany({
-      where: {
-        userId,
-        nextReviewAt: { lte: new Date() },
-        isMastered: false,
-      },
-      include: {
-        word: {
-          include: { unit: true },
-        },
-      },
-      orderBy: { nextReviewAt: 'asc' },
-    });
+    const result = await getDueWords(userId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
-    const allWords = await prisma.word.findMany({
-      select: { english: true },
-    });
+// GET /api/units/review - Alias for review
+router.get('/review', async (req: Request, res: Response) => {
+  try {
+    const userId = parseInt(req.query.userId as string);
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
 
-    const reviewWords = dueProgress.map((p) => {
-      const correctAnswer = p.word.english;
-      const otherOptions = allWords
-        .map((w) => w.english)
-        .filter((e) => e !== correctAnswer)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 3);
-      
-      const options = [...otherOptions, correctAnswer].sort(() => Math.random() - 0.5);
-      
-      return {
-        progressId: p.id,
-        word: p.word,
-        mistakeCount: p.mistakeCount,
-        srsStage: p.srsStage,
-        nextReviewAt: p.nextReviewAt,
-        options,
-      };
-    });
-
-    res.json({ reviewWords, count: reviewWords.length });
+    const result = await getDueWords(userId);
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }

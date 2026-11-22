@@ -8,14 +8,15 @@ datasource db {
 }
 
 model User {
-  id           Int               @id @default(autoincrement())
-  telegramId   BigInt            @unique
-  firstName    String
-  streakDays   Int               @default(0)
-  lastActiveAt DateTime          @default(now())
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  progress     UserWordProgress[]
+  id             Int                @id @default(autoincrement())
+  telegramId     BigInt             @unique
+  firstName      String
+  streakDays     Int                @default(0)
+  lastActiveAt   DateTime           @default(now())
+  lastReminderAt DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  progress       UserWordProgress[]
 }
 
 model Unit {
