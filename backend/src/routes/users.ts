@@ -32,11 +32,13 @@ router.post('/auth', async (req: Request, res: Response) => {
       where: { telegramId: BigInt(userData.id) },
       update: {
         firstName: userData.first_name,
+        username: userData.username || null,
         lastActiveAt: new Date(),
       },
       create: {
         telegramId: BigInt(userData.id),
         firstName: userData.first_name,
+        username: userData.username || null,
       },
     });
 

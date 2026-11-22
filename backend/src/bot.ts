@@ -17,12 +17,13 @@ export function startBot() {
   bot.command('start', async (ctx) => {
     const telegramId = BigInt(ctx.from?.id || 0);
     const firstName = ctx.from?.first_name || 'O\'quvchi';
+    const username = ctx.from?.username || null;
 
-    // Upsert user
+    // Upsert user with username
     await prisma.user.upsert({
       where: { telegramId },
-      update: { firstName },
-      create: { telegramId, firstName },
+      update: { firstName, username },
+      create: { telegramId, firstName, username },
     });
 
     const keyboard = new InlineKeyboard().webApp(
@@ -47,11 +48,15 @@ export function startBot() {
   // Admin Telegram ID
   const ADMIN_TELEGRAM_ID = 1100274830;
 
+  function escapeHtml(text: string): string {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
   // /stats command - only for admin
   bot.command('stats', async (ctx) => {
     const senderId = ctx.from?.id;
 
-    // Ignore non-admin users completely
+    // 1. Ignore non-admin users completely
     if (senderId !== ADMIN_TELEGRAM_ID) {
       return;
     }
@@ -59,10 +64,11 @@ export function startBot() {
     try {
       const now = new Date();
 
-      // 1. Total users
+      // 2. Prisma statistics
+      // Total users
       const totalUsers = await prisma.user.count();
 
-      // 2. Today's registrations (Asia/Tashkent UTC+5)
+      // Today's registrations (Asia/Tashkent UTC+5)
       const tashkentOffset = 5 * 60 * 60 * 1000;
       const tashkentNow = new Date(now.getTime() + tashkentOffset);
       const todayStart = new Date(
@@ -83,40 +89,69 @@ export function startBot() {
         },
       });
 
-      // 3. Total duels (and completed count)
+      // Total duels
       const totalDuels = await prisma.duel.count();
-      const completedDuels = await prisma.duel.count({
-        where: { status: 'COMPLETED' },
-      });
 
-      // 4. Active users who studied at least 1 word
-      const activeLearners = await prisma.user.count({
-        where: {
-          progress: {
-            some: {
-              OR: [
-                { srsStage: { gt: 0 } },
-                { mistakeCount: { gt: 0 } },
-                { isMastered: true },
-              ],
+      // 3. User list (up to 50 latest active users)
+      const users = await prisma.user.findMany({
+        take: 50,
+        orderBy: { lastActiveAt: 'desc' },
+        include: {
+          _count: {
+            select: {
+              progress: {
+                where: { isMastered: true },
+              },
             },
           },
         },
       });
 
-      const message =
-        `👑 *WordDrill — Admin Statistikasi*\n\n` +
-        `👥 *Jami foydalanuvchilar:* ${totalUsers} ta\n` +
-        `🆕 *Bugun ro'yxatdan o'tganlar:* ${todayRegistered} ta\n` +
-        `⚔️ *Jami Duellar soni:* ${totalDuels} ta (tugallangan: ${completedDuels})\n` +
-        `📚 *Faol o'quvchilar (kamida 1 ta so'z):* ${activeLearners} ta\n\n` +
-        `🕒 _Toshkent vaqti: ${new Intl.DateTimeFormat('uz-UZ', {
-          timeZone: 'Asia/Tashkent',
-          dateStyle: 'short',
-          timeStyle: 'medium',
-        }).format(now)}_`;
+      const userLines = users.map((u, idx) => {
+        const safeName = escapeHtml(u.firstName);
+        const rawUsername = u.username
+          ? (u.username.startsWith('@') ? u.username : `@${u.username}`)
+          : "username yo'q";
+        const safeUsername = escapeHtml(rawUsername);
+        const masteredCount = u._count.progress;
+        return `${idx + 1}. ${safeName} (${safeUsername}) — ${masteredCount} ta so'z`;
+      });
 
-      await ctx.reply(message, { parse_mode: 'Markdown' });
+      const userListText = userLines.length > 0
+        ? userLines.join('\n')
+        : "Hali foydalanuvchilar mavjud emas.";
+
+      const timeString = new Intl.DateTimeFormat('uz-UZ', {
+        timeZone: 'Asia/Tashkent',
+        dateStyle: 'short',
+        timeStyle: 'medium',
+      }).format(now);
+
+      const message =
+        `📊 <b>WordDrill — Admin Statistikasi</b>\n\n` +
+        `👥 <b>Jami foydalanuvchilar:</b> ${totalUsers} ta\n` +
+        `🆕 <b>Bugun ro'yxatdan o'tganlar:</b> ${todayRegistered} ta\n` +
+        `⚔️ <b>Jami o'ynalgan Duellar:</b> ${totalDuels} ta\n\n` +
+        `📋 <b>Oxirgi faol foydalanuvchilar (50 tagacha):</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `${userListText}\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `🕒 <i>Toshkent vaqti: ${timeString}</i>`;
+
+      // Telegram messages max length is 4096 characters
+      if (message.length > 4000) {
+        // If message is too long, split header and list
+        const header =
+          `📊 <b>WordDrill — Admin Statistikasi</b>\n\n` +
+          `👥 <b>Jami foydalanuvchilar:</b> ${totalUsers} ta\n` +
+          `🆕 <b>Bugun ro'yxatdan o'tganlar:</b> ${todayRegistered} ta\n` +
+          `⚔️ <b>Jami o'ynalgan Duellar:</b> ${totalDuels} ta\n\n` +
+          `📋 <b>Oxirgi faol foydalanuvchilar:</b>`;
+        await ctx.reply(header, { parse_mode: 'HTML' });
+        await ctx.reply(userListText, { parse_mode: 'HTML' });
+      } else {
+        await ctx.reply(message, { parse_mode: 'HTML' });
+      }
     } catch (error) {
       console.error('Admin /stats error:', error);
       await ctx.reply('❌ Statistikani olishda xatolik yuz berdi.');
