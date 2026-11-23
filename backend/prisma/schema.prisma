@@ -15,6 +15,7 @@ model User {
   streakDays     Int                @default(0)
   lastActiveAt   DateTime           @default(now())
   lastReminderAt DateTime?
+  nudgeSent      Boolean            @default(false)
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   progress       UserWordProgress[]
